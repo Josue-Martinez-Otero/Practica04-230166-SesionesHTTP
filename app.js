@@ -3,6 +3,7 @@ import session from 'express-session';
 import bodyParser from 'body-parser';
 import { v4 as uuidv4 } from 'uuid';
 import os from 'os';
+import moment from 'moment-timezone';
 
 const app = express();
 const PORT = 3000;
@@ -29,7 +30,7 @@ app.use(
 );
 
 // Ruta principal
-app.get('/', (req, res) => {
+app.get('/welcome', (req, res) => {
     return res.status(200).json({
         message: 'Bienvenid@ al API de control de sesiones',
         author: 'Josue Atlai Martinez Otero',
@@ -44,11 +45,11 @@ const getLocalIP = () => {
         for (const iface of interfaces) {
             // IPv4 y no interna (no localhost)
             if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
+                return { ip: iface.address, mac: iface.mac };
             }
         }
     }
-    return null; // Retorna null si no se encuentra una IP válida
+    return { ip: null, mac: null }; // Retorna null si no se encuentra una IP válida
 };
 
 // Ruta para iniciar sesión
@@ -58,14 +59,18 @@ app.post('/login', (req, res) => {
     if (!email || !nickname || !macAddress) {
         return res.status(400).json({ message: 'Se esperan campos requeridos' });
     }
+
     const sessionID = uuidv4();
     const now = new Date();
+    const networkInfo = getLocalIP();
+
     sessions[sessionID] = {
         sessionID,
         email,
         nickname,
         macAddress,
-        ip: getLocalIP(),
+        ip: networkInfo.ip,
+        serverMac: networkInfo.mac,
         createdAt: now,
         lastAccessed: now,
     };
@@ -117,8 +122,50 @@ app.get('/status', (req, res) => {
         return res.status(404).json({ message: 'No hay sesiones activas' });
     }
 
+    const session = sessions[sessionID];
     res.status(200).json({
         message: 'Sesión activa',
-        session: sessions[sessionID],
+        session: {
+            sessionID: session.sessionID,
+            email: session.email,
+            nickname: session.nickname,
+            createdAt: moment(session.createdAt).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
+            lastAccessed: moment(session.lastAccessed).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
+            ip: session.ip,
+            macAddress: session.macAddress,
+            serverMac: session.serverMac,
+        },
     });
 });
+
+// Ruta para listar sesiones activas
+app.get('/listCurrentSessions', (req, res) => {
+    const activeSessions = Object.values(sessions).map((session) => ({
+        sessionID: session.sessionID,
+        email: session.email,
+        nickname: session.nickname,
+        createdAt: moment(session.createdAt).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
+        lastAccessed: moment(session.lastAccessed).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
+        ip: session.ip,
+        macAddress: session.macAddress,
+        serverMac: session.serverMac,
+    }));
+
+    res.status(200).json({
+        message: 'Sesiones activas',
+        sessions: activeSessions,
+    });
+});
+
+// Destrucción automática después de 2 minutos de inactividad
+setInterval(() => {
+    const now = new Date();
+    Object.keys(sessions).forEach((sessionID) => {
+        const session = sessions[sessionID];
+        const inactivity = (now - session.lastAccessed) / 1000;
+        if (inactivity > 120) { // 2 minutos
+            delete sessions[sessionID];
+            console.log(`Sesión expirada: ${sessionID}`);
+        }
+    });
+}, 60000); // Verificación cada minuto
