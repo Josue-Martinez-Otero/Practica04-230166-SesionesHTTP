@@ -116,48 +116,37 @@ app.put('/update', (req, res) => {
 
 // Ruta para consultar el estado de la sesión
 app.post('/status', (req, res) => {
-    const { sessionID } = req.body; // Leer del cuerpo de la solicitud
-
-    if (!sessionID || !sessions[sessionID]) {
+    if (!req.session.user) {
         return res.status(404).json({ message: 'No hay sesiones activas' });
     }
 
-    const session = sessions[sessionID];
+    const session = req.session.user;
     const now = new Date();
     const inactivitySeconds = Math.floor((now - session.lastAccessed) / 1000); // Tiempo en segundos
 
+    // Convertir los segundos de inactividad en horas, minutos y segundos
+    const hours = Math.floor(inactivitySeconds / 3600); // Calcular horas
+    const minutes = Math.floor((inactivitySeconds % 3600) / 60); // Calcular minutos
+    const seconds = inactivitySeconds % 60; // Calcular segundos restantes
+
+    // Formatear la fecha de último acceso
+    const lastAccessedAtFormatted = moment(session.lastAccessed)
+        .tz('America/Mexico_City')
+        .format('YYYY-MM-DD HH:mm:ss');
+
+    // Respuesta con la información de la sesión y el tiempo de inactividad
     res.status(200).json({
-        message: 'Sesión activa',
+        message: "Sesión activa",
         session: {
             sessionID: session.sessionID,
             email: session.email,
             nickname: session.nickname,
-            createdAt: moment(session.createdAt).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
-            lastAccessed: moment(session.lastAccessed).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
             ip: session.ip,
             macAddress: session.macAddress,
-            serverMac: session.serverMac,
-            inactivitySeconds, // Tiempo de inactividad en segundos
+            serverMac: session.serverMac
         },
-    });
-});
-
-// Ruta para listar sesiones activas
-app.get('/listCurrentSessions', (req, res) => {
-    const activeSessions = Object.values(sessions).map((session) => ({
-        sessionID: session.sessionID,
-        email: session.email,
-        nickname: session.nickname,
-        createdAt: moment(session.createdAt).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
-        lastAccessed: moment(session.lastAccessed).tz('America/Mexico_City').format('YYYY-MM-DD HH:mm:ss'),
-        ip: session.ip,
-        macAddress: session.macAddress,
-        serverMac: session.serverMac,
-    }));
-
-    res.status(200).json({
-        message: 'Sesiones activas',
-        sessions: activeSessions,
+        lastAccessedAt: lastAccessedAtFormatted, // Fecha de último acceso
+        inactivityTime: `${hours} horas, ${minutes} minutos, ${seconds} segundos`, // Tiempo de inactividad en formato horas, minutos, segundos
     });
 });
 
