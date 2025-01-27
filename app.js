@@ -115,14 +115,17 @@ app.put('/update', (req, res) => {
 });
 
 // Ruta para consultar el estado de la sesión
-app.get('/status', (req, res) => {
-    const sessionID = req.query.sessionID;
+app.post('/status', (req, res) => {
+    const { sessionID } = req.body; // Leer del cuerpo de la solicitud
 
     if (!sessionID || !sessions[sessionID]) {
         return res.status(404).json({ message: 'No hay sesiones activas' });
     }
 
     const session = sessions[sessionID];
+    const now = new Date();
+    const inactivitySeconds = Math.floor((now - session.lastAccessed) / 1000); // Tiempo en segundos
+
     res.status(200).json({
         message: 'Sesión activa',
         session: {
@@ -134,6 +137,7 @@ app.get('/status', (req, res) => {
             ip: session.ip,
             macAddress: session.macAddress,
             serverMac: session.serverMac,
+            inactivitySeconds, // Tiempo de inactividad en segundos
         },
     });
 });
