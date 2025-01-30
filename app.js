@@ -64,7 +64,7 @@ app.post('/login', (req, res) => {
     const now = new Date();
     const networkInfo = getLocalIP();
 
-    sessions[sessionID] = {
+    const sessionData = {
         sessionID,
         email,
         nickname,
@@ -74,12 +74,22 @@ app.post('/login', (req, res) => {
         createdAt: now,
         lastAccessed: now,
     };
+
+    // Guardar en memoria
+    sessions[sessionID] = sessionData;
+
+    // Guardar en req.session
+    req.session.sessionID = sessionID; // Guardar solo el ID
+    req.session.user = sessionData; // Guardar toda la sesión
+
     console.log(`Nueva sesión creada: ${sessionID}`);
     res.status(200).json({
         message: 'Se ha logeado de manera exitosa',
         sessionID,
     });
 });
+
+
 
 // Ruta para cerrar sesión
 app.post('/logout', (req, res) => {
@@ -116,25 +126,22 @@ app.put('/update', (req, res) => {
 
 // Ruta para consultar el estado de la sesión
 app.post('/status', (req, res) => {
-    if (!req.session.user) {
+    if (!req.session.sessionID || !sessions[req.session.sessionID]) {
         return res.status(404).json({ message: 'No hay sesiones activas' });
     }
 
-    const session = req.session.user;
+    const session = sessions[req.session.sessionID]; // Obtener sesión de memoria
     const now = new Date();
-    const inactivitySeconds = Math.floor((now - session.lastAccessed) / 1000); // Tiempo en segundos
+    const inactivitySeconds = Math.floor((now - session.lastAccessed) / 1000);
 
-    // Convertir los segundos de inactividad en horas, minutos y segundos
-    const hours = Math.floor(inactivitySeconds / 3600); // Calcular horas
-    const minutes = Math.floor((inactivitySeconds % 3600) / 60); // Calcular minutos
-    const seconds = inactivitySeconds % 60; // Calcular segundos restantes
+    const hours = Math.floor(inactivitySeconds / 3600);
+    const minutes = Math.floor((inactivitySeconds % 3600) / 60);
+    const seconds = inactivitySeconds % 60;
 
-    // Formatear la fecha de último acceso
     const lastAccessedAtFormatted = moment(session.lastAccessed)
         .tz('America/Mexico_City')
         .format('YYYY-MM-DD HH:mm:ss');
 
-    // Respuesta con la información de la sesión y el tiempo de inactividad
     res.status(200).json({
         message: "Sesión activa",
         session: {
@@ -145,10 +152,11 @@ app.post('/status', (req, res) => {
             macAddress: session.macAddress,
             serverMac: session.serverMac
         },
-        lastAccessedAt: lastAccessedAtFormatted, // Fecha de último acceso
-        inactivityTime: `${hours} horas, ${minutes} minutos, ${seconds} segundos`, // Tiempo de inactividad en formato horas, minutos, segundos
+        lastAccessedAt: lastAccessedAtFormatted,
+        inactivityTime: `${hours} horas, ${minutes} minutos, ${seconds} segundos`,
     });
 });
+
 
 // Destrucción automática después de 2 minutos de inactividad
 setInterval(() => {
@@ -162,3 +170,16 @@ setInterval(() => {
         }
     });
 }, 60000); // Verificación cada minuto
+
+// Ruta para listar todas las sesiones activas
+app.get('/listCurrentSessions', (req, res) => {
+    if (Object.keys(sessions).length === 0) {
+        return res.status(404).json({ message: 'No hay sesiones activas' });
+    }
+
+    res.status(200).json({
+        message: 'Sesiones activas',
+        activeSessions: Object.values(sessions), // Devuelve todas las sesiones en memoria
+    });
+});
+
